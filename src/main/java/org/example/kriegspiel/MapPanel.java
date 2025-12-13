@@ -104,7 +104,7 @@ public class MapPanel extends JPanel {
                 statusConsumer.accept(terrainInfo + " | " + unitInfo);
             } else {
                 if (map.hasTrapAt(x, y)) {
-                    terrainInfo += " | ⚠️ Ловушка";
+                    terrainInfo += " | Ловушка";
                 }
                 statusConsumer.accept(terrainInfo);
             }
@@ -140,7 +140,7 @@ public class MapPanel extends JPanel {
         }
 
         if (game.isActionPerformedThisTurn()) {
-            statusConsumer.accept("Вы уже выполнили действие в этом ходу. Ход переходит к противнику...");
+            statusConsumer.accept("Вы уже выполнили действие в этом ходу. Ход переходит к противнику.");
             return;
         }
 
