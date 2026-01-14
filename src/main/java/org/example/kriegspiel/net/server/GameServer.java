@@ -242,8 +242,8 @@ public class GameServer extends WebSocketServer {
                 if (!visible[y][x]) {
                     dto.terrain[y][x] = null; // null означает туман
                 }
-                // ловушки видны только если клетка видима
-                dto.traps[y][x] = dto.traps[y][x] && visible[y][x];
+                // Ловушки скрыты от всех игроков - всегда false
+                dto.traps[y][x] = false;
             }
         }
 

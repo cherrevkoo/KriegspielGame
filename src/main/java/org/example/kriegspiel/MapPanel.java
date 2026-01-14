@@ -8,6 +8,12 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
+import javax.imageio.ImageIO;
 
 public class MapPanel extends JPanel {
 
@@ -17,6 +23,33 @@ public class MapPanel extends JPanel {
 
     private int selectedX = -1;
     private int selectedY = -1;
+
+    private static final Map<String, Image> unitIcons = new HashMap<>();
+
+    static {
+        loadIcons();
+    }
+
+    private static void loadIcons() {
+        String[] types = {"infantry", "cavalry", "artillery"};
+        String[] colors = {"blue", "red"};
+        
+        for (String type : types) {
+            for (String color : colors) {
+                String key = type + "_" + color;
+                try {
+                    InputStream is = MapPanel.class.getResourceAsStream("/icons/" + key + ".png");
+                    if (is != null) {
+                        BufferedImage img = ImageIO.read(is);
+                        unitIcons.put(key, img.getScaledInstance(CELL_SIZE - 20, CELL_SIZE - 20, Image.SCALE_SMOOTH));
+                        is.close();
+                    }
+                } catch (IOException e) {
+                    System.err.println("Не удалось загрузить иконку: " + key);
+                }
+            }
+        }
+    }
 
     public MapPanel(ClientGameState state) {
         this.state = state;
@@ -60,8 +93,11 @@ public class MapPanel extends JPanel {
         }
 
         if (SwingUtilities.isLeftMouseButton(e)) {
-            // move
-            state.requestMove(selectedX, selectedY, x, y);
+            if (clicked != null && clicked.owner != myIdx) {
+                state.requestAttack(selectedX, selectedY, x, y);
+            } else {
+                state.requestMove(selectedX, selectedY, x, y);
+            }
         } else if (SwingUtilities.isRightMouseButton(e)) {
             if (clicked != null && clicked.owner != myIdx) {
                 state.requestAttack(selectedX, selectedY, x, y);
@@ -109,11 +145,6 @@ public class MapPanel extends JPanel {
         }
         g.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
 
-        if (state.hasTrapAt(x, y)) {
-            g.setColor(Color.BLACK);
-            g.drawString("TRAP", x * CELL_SIZE + 5, y * CELL_SIZE + 15);
-        }
-
         UnitDTO u = state.getUnitAt(x, y);
         if (u != null) {
             drawUnit(g, u, x, y);
@@ -128,27 +159,30 @@ public class MapPanel extends JPanel {
     }
 
     private void drawUnit(Graphics g, UnitDTO u, int x, int y) {
-        int myIdx = state.getMyPlayerIndex();
-
-        // цвет зависит от владельца
-        if (u.owner == 1) g.setColor(new Color(60, 80, 200));
-        else g.setColor(new Color(200, 70, 70));
-
+        String unitType = u.type.toLowerCase();
+        String color = (u.owner == 1) ? "blue" : "red";
+        String iconKey = unitType + "_" + color;
+        
+        Image icon = unitIcons.get(iconKey);
+        
         int pad = 10;
-        g.fillOval(x * CELL_SIZE + pad, y * CELL_SIZE + pad, CELL_SIZE - 2 * pad, CELL_SIZE - 2 * pad);
-
-        g.setColor(Color.WHITE);
-        String label = u.type.substring(0, Math.min(3, u.type.length())).toUpperCase();
-        g.drawString(label, x * CELL_SIZE + 20, y * CELL_SIZE + 33);
-
-        // HP
-        g.setColor(Color.BLACK);
-        g.drawString("HP:" + u.hp, x * CELL_SIZE + 5, y * CELL_SIZE + CELL_SIZE - 5);
-
-        // маркер "ваш/враг"
-        if (myIdx > 0) {
-            g.setColor(Color.BLACK);
-            g.drawString(u.owner == myIdx ? "YOU" : "EN", x * CELL_SIZE + 5, y * CELL_SIZE + 15);
+        int iconSize = CELL_SIZE - 2 * pad;
+        
+        if (icon != null) {
+            // Рисуем иконку
+            g.drawImage(icon, x * CELL_SIZE + pad, y * CELL_SIZE + pad, iconSize, iconSize, null);
+        } else {
+            if (u.owner == 1) g.setColor(new Color(60, 80, 200));
+            else g.setColor(new Color(200, 70, 70));
+            g.fillOval(x * CELL_SIZE + pad, y * CELL_SIZE + pad, iconSize, iconSize);
+            
+            g.setColor(Color.WHITE);
+            String label = u.type.substring(0, Math.min(3, u.type.length())).toUpperCase();
+            g.drawString(label, x * CELL_SIZE + 20, y * CELL_SIZE + 33);
         }
+
+        g.setColor(Color.BLACK);
+        g.setFont(new Font("Arial", Font.BOLD, 10));
+        g.drawString("HP:" + u.hp, x * CELL_SIZE + 5, y * CELL_SIZE + CELL_SIZE - 5);
     }
 }
