@@ -2,156 +2,141 @@ package org.example.kriegspiel;
 
 import org.example.kriegspiel.net.GameStateDTO;
 import org.example.kriegspiel.net.client.ClientGameState;
-import org.example.kriegspiel.net.client.GameController;
+import org.example.kriegspiel.net.client.NetworkClient;
+import org.example.kriegspiel.net.server.GameServer;
 
 import javax.swing.*;
 import java.awt.*;
+import java.net.URI;
+import java.util.function.Supplier;
 
 public class GameFrame extends JFrame {
 
-    private final ClientGameState state;
+    private NetworkClient client;
+    private GameServer server;
+
+    private final JLabel statusLabel = new JLabel("Статус: не подключено");
+
+    private final ClientGameState localState;
     private final MapPanel mapPanel;
-    private final JLabel statusLabel;
-    private final JLabel player1Label;
-    private final JLabel player2Label;
+    private Supplier<Integer> myPlayerIndexSupplier;
 
-    private final GameController controller;
-    private final java.util.function.IntSupplier myPlayerIndexSupplier;
+    public GameFrame() {
+        super("Kriegspiel");
+        this.localState = new ClientGameState();
+        this.mapPanel = new MapPanel(localState);
+        initializeUI();
+    }
 
-    public GameFrame(ClientGameState state,
-                     GameController controller,
-                     java.util.function.IntSupplier myPlayerIndexSupplier) {
-        super("Крингшпиль (WebSocket)");
-
-        this.state = state;
-        this.controller = controller;
+    public GameFrame(ClientGameState state, NetworkClient client, Supplier<Integer> myPlayerIndexSupplier) {
+        super("Kriegspiel");
+        this.localState = state;
+        this.client = client;
         this.myPlayerIndexSupplier = myPlayerIndexSupplier;
+        this.mapPanel = new MapPanel(localState);
 
+        localState.setController(client);
+        
+        initializeUI();
+    }
+
+    private void initializeUI() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // top panel (players)
-        JPanel top = new JPanel(new GridLayout(1, 2));
-        player1Label = new JLabel("", SwingConstants.CENTER);
-        player2Label = new JLabel("", SwingConstants.CENTER);
-        player1Label.setFont(new Font("Arial", Font.BOLD, 16));
-        player2Label.setFont(new Font("Arial", Font.BOLD, 16));
-        top.add(player1Label);
-        top.add(player2Label);
-        add(top, BorderLayout.NORTH);
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton hostBtn = new JButton("Создать сервер (host)");
+        JButton joinBtn = new JButton("Подключиться (join)");
 
-        // map
-        mapPanel = new MapPanel(state, controller, myPlayerIndexSupplier, this::setStatusText, this::onAfterAction);
+        top.add(hostBtn);
+        top.add(joinBtn);
+        top.add(statusLabel);
+
+        add(top, BorderLayout.NORTH);
         add(mapPanel, BorderLayout.CENTER);
 
-        // bottom bar
-        JPanel bottom = new JPanel(new BorderLayout());
-        statusLabel = new JLabel("Подключение...");
-        bottom.add(statusLabel, BorderLayout.CENTER);
-
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton rulesBtn = new JButton("Правила");
-        rulesBtn.addActionListener(e -> showRulesDialog());
-        buttons.add(rulesBtn);
-
-        bottom.add(buttons, BorderLayout.EAST);
-        add(bottom, BorderLayout.SOUTH);
+        hostBtn.addActionListener(e -> startHost());
+        joinBtn.addActionListener(e -> joinServer());
 
         pack();
         setLocationRelativeTo(null);
+        setVisible(true);
+    }
 
-        updatePlayerLabels();
+    private void startHost() {
+        if (server != null) {
+            statusLabel.setText("Сервер уже запущен");
+            return;
+        }
+        try {
+            server = new GameServer(8080, 8, 8);
+            server.start();
+            statusLabel.setText("Сервер запущен на 8080. Теперь подключитесь как клиент.");
+        } catch (Exception ex) {
+            statusLabel.setText("Ошибка запуска сервера: " + ex.getMessage());
+        }
+    }
+
+    private void joinServer() {
+        String url = JOptionPane.showInputDialog(this,
+                "Введите ws:// или wss:// адрес:",
+                "ws://127.0.0.1:8080");
+
+        if (url == null || url.isBlank()) return;
+
+        String name = JOptionPane.showInputDialog(this, "Имя игрока:", "Игрок");
+        if (name == null || name.isBlank()) name = "Игрок";
+
+        try {
+            client = new NetworkClient(
+                    new URI(url),
+                    name,
+                    this::onState,
+                    this::onStatus,
+                    () -> SwingUtilities.invokeLater(() ->
+                            statusLabel.setText("Подключено. Отправляем JOIN…"))
+            );
+
+            client.connect();
+
+        } catch (Exception ex) {
+            statusLabel.setText("Ошибка подключения: " + ex.getMessage());
+        }
     }
 
     public void applyState(GameStateDTO dto) {
-        state.update(dto);
+        SwingUtilities.invokeLater(() -> {
+            localState.updateFromDTO(dto);
 
-
-        updatePlayerLabels();
-
-        if (dto.gameOver) {
-            String winnerName = state.getPlayerName(dto.winner);
-            JOptionPane.showMessageDialog(this, "Игра окончена! Победил: " + winnerName);
-        }
-
-        mapPanel.repaint();
-
-        int myIdx = myPlayerIndexSupplier.getAsInt();
-        if (myIdx > 0) {
-            if (state.getCurrentPlayer() == myIdx) {
-                setStatusText("Ваш ход. Выберите юнита и выполните действие (ход или атака).");
-            } else {
-                setStatusText("Ход противника: " + state.getPlayerName(state.getCurrentPlayer()));
+            if (myPlayerIndexSupplier != null) {
+                localState.setMyPlayerIndex(myPlayerIndexSupplier.get());
+            } else if (client != null) {
+                localState.setMyPlayerIndex(client.getMyPlayerIndex());
             }
-        }
+            
+            mapPanel.repaint();
+
+            int myIdx = localState.getMyPlayerIndex();
+            boolean myTurn = (myIdx > 0 && dto.currentPlayer == myIdx && !dto.gameOver);
+
+            if (dto.gameOver) {
+                if (dto.winner == 0) statusLabel.setText("Игра окончена: ничья");
+                else statusLabel.setText("Игра окончена. Победил игрок " + dto.winner);
+            } else {
+                statusLabel.setText(myTurn ? "Ваш ход" : "Ходит противник");
+            }
+        });
     }
 
     public void setStatusText(String text) {
-        statusLabel.setText(text);
+        SwingUtilities.invokeLater(() -> statusLabel.setText(text));
     }
 
-    private void updatePlayerLabels() {
-        String p1Text = state.getPlayerName(1) + " (" + state.countUnits(1) + " юнитов)";
-        String p2Text = state.getPlayerName(2) + " (" + state.countUnits(2) + " юнитов)";
-
-        if (state.getCurrentPlayer() == 1) {
-            p1Text = "▶ " + p1Text;
-            player1Label.setForeground(Color.BLUE);
-            player2Label.setForeground(Color.BLACK);
-        } else {
-            p2Text = "▶ " + p2Text;
-            player1Label.setForeground(Color.BLACK);
-            player2Label.setForeground(Color.BLUE);
-        }
-
-        int myIdx = myPlayerIndexSupplier.getAsInt();
-        if (myIdx == 1) {
-            p1Text += " (Вы)";
-        } else if (myIdx == 2) {
-            p2Text += " (Вы)";
-        }
-
-        player1Label.setText(p1Text);
-        player2Label.setText(p2Text);
+    private void onState(GameStateDTO dto) {
+        applyState(dto);
     }
 
-    private void onAfterAction() {
-        // На сервере ход завершается автоматически после успешного MOVE/ATTACK.
-        // Здесь просто уберём выделение.
-        mapPanel.clearSelection();
-        mapPanel.repaint();
-    }
-
-    private void showRulesDialog() {
-        String rules = """
-            ════════════════════════════════════════════════════════
-                           ПРАВИЛА ИГРЫ КРИНГШПИЛЬ
-            ════════════════════════════════════════════════════════
-
-            ЦЕЛЬ ИГРЫ
-            Уничтожить все юниты противника!
-
-            ХОД
-            В свой ход выберите одного своего юнита и выполните ОДНО действие:
-            • перемещение, или
-            • атака
-
-            ТЕРРЕЙН
-            • Равнина: доступна всем
-            • Лес: кавалерия не может входить
-            • Болото: оглушает; артиллерия не может входить
-            • Холм: артиллерия +1 к дальности атаки
-
-            ВЕБ-ВЕРСИЯ (WebSocket)
-            Сервер — авторитет: он проверяет ходы/атаки и рассылает состояние обоим игрокам.
-            """;
-
-        JTextArea area = new JTextArea(rules);
-        area.setEditable(false);
-        area.setFont(new Font("Monospaced", Font.PLAIN, 12));
-
-        JScrollPane scroll = new JScrollPane(area);
-        scroll.setPreferredSize(new Dimension(650, 450));
-        JOptionPane.showMessageDialog(this, scroll, "Правила", JOptionPane.INFORMATION_MESSAGE);
+    private void onStatus(String text) {
+        setStatusText(text);
     }
 }

@@ -18,10 +18,7 @@ public class NetworkClient extends WebSocketClient implements GameController {
     private final Consumer<GameStateDTO> onState;
     private final Consumer<String> onStatus;
     private final Runnable onConnected;
-    /**
-     * 0 = роль ещё не назначена сервером, 1 или 2 = ваш номер игрока.
-     * (MapPanel/GameFrame ожидают именно 0 как «неизвестно».)
-     */
+
     private volatile int myPlayerIndex = 0;
 
     public int getMyPlayerIndex() {
@@ -89,13 +86,17 @@ public class NetworkClient extends WebSocketClient implements GameController {
 
     @Override
     public void requestMove(int fromX, int fromY, int toX, int toY) {
-        send(gson.toJson(new NetMessage(Protocol.TYPE_ACTION,
-                new ActionRequest(Protocol.ACTION_MOVE, fromX, fromY, toX, toY))));
+        send(gson.toJson(new NetMessage(
+                Protocol.TYPE_ACTION,
+                new ActionRequest(Protocol.ACTION_MOVE, fromX, fromY, toX, toY)
+        )));
     }
 
     @Override
     public void requestAttack(int fromX, int fromY, int toX, int toY) {
-        send(gson.toJson(new NetMessage(Protocol.TYPE_ACTION,
-                new ActionRequest(Protocol.ACTION_ATTACK, fromX, fromY, toX, toY))));
+        send(gson.toJson(new NetMessage(
+                Protocol.TYPE_ACTION,
+                new ActionRequest(Protocol.ACTION_ATTACK, fromX, fromY, toX, toY)
+        )));
     }
 }
