@@ -118,12 +118,13 @@ public class GameFrame extends JFrame {
         JLabel generalHeader = new JLabel("Общие правила");
         generalHeader.setFont(headerFont);
         panel.add(generalHeader);
-        panel.add(createRuleLabel("• ЛКМ на врага - атака", textFont));
-        panel.add(createRuleLabel("• ЛКМ на пустую клетку - движение", textFont));
-        panel.add(createRuleLabel("• ПКМ на врага - атака", textFont));
+        panel.add(createRuleLabel("• Клик на врага - атака", textFont));
+        panel.add(createRuleLabel("• Клик на пустую клетку - движение", textFont));
+        panel.add(createRuleLabel("• Выберите юнита, затем цель", textFont));
         panel.add(createRuleLabel("• Болото оглушает на 1-2 хода", textFont));
         panel.add(createRuleLabel("• Ловушки скрыты до активации", textFont));
         panel.add(createRuleLabel("• Туман войны скрывает врагов", textFont));
+        panel.add(createRuleLabel("• Наведите на клетку для подсказки", textFont));
 
         return panel;
     }
@@ -192,6 +193,14 @@ public class GameFrame extends JFrame {
                 gameStarted = true;
                 hostBtn.setVisible(false);
                 joinBtn.setVisible(false);
+                topPanel.revalidate();
+                topPanel.repaint();
+            }
+            
+            if (dto.gameOver && gameStarted) {
+                gameStarted = false;
+                hostBtn.setVisible(true);
+                joinBtn.setVisible(true);
                 topPanel.revalidate();
                 topPanel.repaint();
             }

@@ -23,6 +23,9 @@ public class MapPanel extends JPanel {
 
     private int selectedX = -1;
     private int selectedY = -1;
+    private int hoverX = -1;
+    private int hoverY = -1;
+    private String hoverTooltip = null;
 
     private static final Map<String, Image> unitIcons = new HashMap<>();
 
@@ -60,6 +63,29 @@ public class MapPanel extends JPanel {
             @Override
             public void mouseClicked(MouseEvent e) {
                 handleClick(e.getX() / CELL_SIZE, e.getY() / CELL_SIZE, e);
+            }
+            
+            @Override
+            public void mouseExited(MouseEvent e) {
+                hoverX = -1;
+                hoverY = -1;
+                hoverTooltip = null;
+                repaint();
+            }
+        });
+        
+        addMouseMotionListener(new MouseAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                int x = e.getX() / CELL_SIZE;
+                int y = e.getY() / CELL_SIZE;
+                
+                if (x != hoverX || y != hoverY) {
+                    hoverX = x;
+                    hoverY = y;
+                    updateTooltip(x, y);
+                    repaint();
+                }
             }
         });
     }
@@ -131,7 +157,7 @@ public class MapPanel extends JPanel {
         TerrainType t = state.getTerrainAt(x, y);
 
         if (t == null) {
-            g.setColor(new Color(40, 40, 40)); // Темный туман войны
+            g.setColor(new Color(40, 40, 40));
             g.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
             return;
         }
@@ -156,6 +182,113 @@ public class MapPanel extends JPanel {
             g.drawRect(x * CELL_SIZE + 2, y * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4);
             ((Graphics2D) g).setStroke(new BasicStroke(1));
         }
+        
+        if (x == hoverX && y == hoverY && hoverTooltip != null) {
+            drawTooltip(g, x, y);
+        }
+    }
+    
+    private void drawTooltip(Graphics g, int x, int y) {
+        if (hoverTooltip == null) return;
+        
+        Graphics2D g2d = (Graphics2D) g;
+        FontMetrics fm = g2d.getFontMetrics();
+        int textWidth = fm.stringWidth(hoverTooltip);
+        int textHeight = fm.getHeight();
+        
+        int padding = 5;
+        int tooltipWidth = textWidth + padding * 2;
+        int tooltipHeight = textHeight + padding * 2;
+        
+        int tooltipX = x * CELL_SIZE + CELL_SIZE / 2 - tooltipWidth / 2;
+        int tooltipY = y * CELL_SIZE - tooltipHeight - 5;
+        
+        if (tooltipY < 0) {
+            tooltipY = y * CELL_SIZE + CELL_SIZE + 5;
+        }
+        
+        g2d.setColor(new Color(0, 0, 0, 117));
+        g2d.fillRoundRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, 5, 5);
+        
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.PLAIN, 11));
+        g2d.drawString(hoverTooltip, tooltipX + padding, tooltipY + textHeight - 2);
+    }
+    
+    private void updateTooltip(int x, int y) {
+        hoverTooltip = null;
+        
+        if (selectedX == -1 || selectedY == -1) return;
+        if (!state.isInside(x, y)) return;
+        
+        int myIdx = state.getMyPlayerIndex();
+        if (myIdx <= 0) return;
+        
+        boolean myTurn = state.getCurrentPlayer() == myIdx && !state.isGameOver();
+        if (!myTurn) return;
+        
+        UnitDTO selected = state.getUnitAt(selectedX, selectedY);
+        if (selected == null || selected.owner != myIdx) return;
+        
+        UnitDTO target = state.getUnitAt(x, y);
+        
+        if (target != null && target.owner == myIdx) {
+            hoverTooltip = "Ваш юнит";
+            return;
+        }
+        
+        if (target != null && target.owner != myIdx) {
+            hoverTooltip = "Атака врага";
+            return;
+        }
+        
+        String reason = getMoveReason(selected, x, y);
+        if (reason != null) {
+            hoverTooltip = reason;
+        }
+    }
+    
+    private String getMoveReason(UnitDTO unit, int targetX, int targetY) {
+        if (!state.isInside(targetX, targetY)) {
+            return "Вне карты";
+        }
+        
+        if (unit.skipTurns > 0) {
+            return "Юнит оглушен (" + unit.skipTurns + " ход)";
+        }
+        
+        int dx = Math.abs(targetX - unit.x);
+        int dy = Math.abs(targetY - unit.y);
+        int distance = dx + dy;
+        
+        int moveRange = getMoveRange(unit.type);
+        if (distance > moveRange) {
+            return "Слишком далеко (макс. " + moveRange + " клеток)";
+        }
+        
+        TerrainType terrain = state.getTerrainAt(targetX, targetY);
+        if (terrain == null) {
+            return "Клетка в тумане войны";
+        }
+        
+        if (unit.type.equalsIgnoreCase("Cavalry") && terrain == TerrainType.FOREST) {
+            return "Кавалерия не может войти в лес";
+        }
+        
+        if (unit.type.equalsIgnoreCase("Artillery") && terrain == TerrainType.SWAMP) {
+            return "Артиллерия не может войти в болото";
+        }
+        
+        return null;
+    }
+    
+    private int getMoveRange(String unitType) {
+        return switch (unitType.toLowerCase()) {
+            case "infantry" -> 2;
+            case "cavalry" -> 4;
+            case "artillery" -> 1;
+            default -> 0;
+        };
     }
 
     private void drawUnit(Graphics g, UnitDTO u, int x, int y) {
@@ -169,7 +302,6 @@ public class MapPanel extends JPanel {
         int iconSize = CELL_SIZE - 2 * pad;
         
         if (icon != null) {
-            // Рисуем иконку
             g.drawImage(icon, x * CELL_SIZE + pad, y * CELL_SIZE + pad, iconSize, iconSize, null);
         } else {
             if (u.owner == 1) g.setColor(new Color(60, 80, 200));
