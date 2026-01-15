@@ -4,17 +4,20 @@ import org.example.kriegspiel.model.Player;
 import org.example.kriegspiel.model.unit.Unit;
 
 import java.util.List;
+import java.util.Random;
 
 public class GameMap {
 
     private final int width;
     private final int height;
     private final Cell[][] cells;
+    private final Random random;
 
     public GameMap(int width, int height) {
         this.width = width;
         this.height = height;
         this.cells = new Cell[height][width];
+        this.random = new Random();
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
@@ -27,28 +30,29 @@ public class GameMap {
     }
 
     private void initTerrain() {
+        // Случайная генерация terrain
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 TerrainType type = TerrainType.PLAIN;
+                double rand = random.nextDouble();
+
+                if (rand < 0.20) {
+                    type = TerrainType.FOREST;
+                }
+
+                else if (rand < 0.35) {
+                    type = TerrainType.SWAMP;
+                }
+
+                else if (rand < 0.50) {
+                    type = TerrainType.HILL;
+                }
+
+                boolean isStartZone1 = (x < 3 && y < 3);
+                boolean isStartZone2 = (x >= width - 3 && y >= height - 3);
                 
-                if ((x + y) % 5 == 0 && (x + y) % 3 != 0) {
-                    type = TerrainType.FOREST;
-                }
-                else if (x > 2 && x < width - 3 && y > 2 && y < height - 3 && 
-                         (x * y) % 11 == 0) {
-                    type = TerrainType.FOREST;
-                }
-                else if ((x == 3 || x == 4) && (y == 3 || y == 4 || y == height - 4)) {
-                    type = TerrainType.SWAMP;
-                }
-                else if ((y == 3 || y == 4) && (x == width - 4 || x == width - 5)) {
-                    type = TerrainType.SWAMP;
-                }
-                else if (y == height / 2 || y == height / 2 - 1 || y == height / 2 + 1) {
-                    type = TerrainType.HILL;
-                }
-                else if (x == width / 2 || x == width / 2 - 1 || x == width / 2 + 1) {
-                    type = TerrainType.HILL;
+                if (isStartZone1 || isStartZone2) {
+                    type = TerrainType.PLAIN;
                 }
                 
                 cells[y][x] = new Cell(x, y, type);
@@ -57,18 +61,35 @@ public class GameMap {
     }
 
     private void initTraps() {
-        int centerX = width / 2;
-        int centerY = height / 2;
+        int numTraps = (width * height) / 20;
+        numTraps = Math.max(3, Math.min(numTraps, 15));
         
-        setTrapAt(centerX, centerY);
-        setTrapAt(centerX - 1, centerY + 1);
-        setTrapAt(centerX + 1, centerY - 1);
+        int trapsPlaced = 0;
+        int attempts = 0;
+        int maxAttempts = width * height * 2;
         
-        if (width >= 8 && height >= 8) {
-            setTrapAt(2, 5);
-            setTrapAt(5, 2);
-            setTrapAt(width - 3, height - 6);
-            setTrapAt(width - 6, height - 3);
+        while (trapsPlaced < numTraps && attempts < maxAttempts) {
+            attempts++;
+            int x = random.nextInt(width);
+            int y = random.nextInt(height);
+
+            boolean isStartZone1 = (x < 3 && y < 3);
+            boolean isStartZone2 = (x >= width - 3 && y >= height - 3);
+            
+            if (isStartZone1 || isStartZone2) {
+                continue;
+            }
+
+            if (cells[y][x].hasTrap()) {
+                continue;
+            }
+
+            if (cells[y][x].getTerrain() == TerrainType.SWAMP) {
+                continue;
+            }
+            
+            setTrapAt(x, y);
+            trapsPlaced++;
         }
     }
 
