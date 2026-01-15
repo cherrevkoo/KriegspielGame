@@ -13,11 +13,11 @@ public class GuiApp {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            String[] options = {"Создать сервер (host)", "Подключиться (join)"};
+            String[] options = {"Создать сервер", "Подключиться"};
             int choice = JOptionPane.showOptionDialog(
                     null,
                     "Выберите режим:",
-                    "Крингшпиль (WebSocket)",
+                    "Крингшпиль",
                     JOptionPane.DEFAULT_OPTION,
                     JOptionPane.QUESTION_MESSAGE,
                     null,
